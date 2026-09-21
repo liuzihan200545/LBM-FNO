@@ -1,0 +1,13 @@
+{
+    "geometry": {
+        "grid_width": 128,
+        "grid_height": 128,
+        "domain_width": 1.0,
+        "domain_height": 1.0,
+        "disk_count": 30,
+        "radius_mean": 0.04,
+        "log_radius_variance": 0.05,
+        "allow_overlap": false,
+        "periodic": true
+  }
+}
