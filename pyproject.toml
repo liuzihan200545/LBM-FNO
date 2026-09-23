@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=2.4.6",
     "pydantic>=2.13.5",
     "pyyaml>=6.0.3",
+    "rcpgenerator",
     "scipy>=1.17.1",
     "tqdm>=4.70.1",
     "warp-lang==1.12.1",
@@ -25,3 +26,6 @@ lbm-fno = "lbm_fno:main"
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.sources]
+rcpgenerator = { git = "https://github.com/KD-physics/RCPGenerator.git", subdirectory = "python_code/python", rev = "974d703a655b337b93379dbcd1a6eef47386d674" }

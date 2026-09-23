@@ -131,12 +131,13 @@ class RSADiskPackGenerator:
         return pore.mean()
 
     def plot(self, solid, figsize=(6, 6), title="RSA Disk-Pack Porous Media"):
-        plt.figure(figsize=figsize)
+        fig = plt.figure(figsize=figsize)
         plt.imshow(solid, cmap="gray", origin="lower")
         plt.title(title)
         plt.axis("off")
         plt.tight_layout()
-        plt.show()
+        plt.show(block=True)
+        plt.close(fig)
 
     def plot_with_circles(self, figsize=(6, 6), title="Placed Circles (Vector View)"):
         fig, ax = plt.subplots(figsize=figsize)
@@ -158,7 +159,8 @@ class RSADiskPackGenerator:
         ax.set_ylim(0, self.nx)
         ax.invert_yaxis()
         plt.tight_layout()
-        plt.show()
+        plt.show(block=True)
+        plt.close(fig)
 
     def save(self, solid, pore, prefix="rock"):
         np.save(f"{prefix}_solid.npy", solid)
@@ -264,7 +266,7 @@ def generate_all_rock_types(
     return results
 
 
-def plot_rock_overview(results, rock_types=(3, 4, 5, 6), show=True):
+def plot_rock_overview(results, rock_types=(3, 4, 5, 6), i = 0, show=True):
     """把选定类别放到同一张图中，每行两张，并保存总览。"""
     if not rock_types:
         raise ValueError("请选择至少一种岩石类型")
@@ -273,20 +275,23 @@ def plot_rock_overview(results, rock_types=(3, 4, 5, 6), show=True):
         figsize=(10, 5 * ((len(rock_types) + 1) // 2)),
         squeeze=False, layout="constrained",
     )
-    for ax, rock_type in zip(axes.flat, rock_types):
-        data = results[rock_type]
-        ax.imshow(data["solid"], cmap="gray_r", vmin=0, vmax=1,
-                  origin="lower", interpolation="nearest")
-        ax.set_title(f"Rock Type {rock_type} | Porosity={data['porosity']:.4f}")
-        ax.set_axis_off()
-    for ax in list(axes.flat)[len(rock_types):]:
-        ax.set_axis_off()
-    output = Path(__file__).resolve().parent / "output" / "rsa_overview.png"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output, dpi=180, facecolor="white")
-    print(f"Saved overview: {output}")
-    if show:
-        plt.show()
+    try:
+        for ax, rock_type in zip(axes.flat, rock_types):
+            data = results[rock_type]
+            ax.imshow(data["solid"], cmap="gray_r", vmin=0, vmax=1,
+                      origin="lower", interpolation="nearest")
+            ax.set_title(f"Rock Type {rock_type} | Porosity={data['porosity']:.4f}")
+            ax.set_axis_off()
+        for ax in list(axes.flat)[len(rock_types):]:
+            ax.set_axis_off()
+        output = Path(__file__).resolve().parent / "output" / f"rsa_overview{i}.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output, dpi=180, facecolor="white")
+        print(f"Saved overview: {output}")
+        if show:
+            plt.show(block=True)
+    finally:
+        plt.close(fig)
     return fig
 
 
@@ -305,17 +310,18 @@ def main():
     # )
 
     # 如果你想生成全部 6 类，把上面注释掉，改用这个：
-    results = generate_all_rock_types(
-        nx=256,
-        ny=256,
-        log_mean=2.0,
-        r_min=2.0,
-        r_max=18.0,
-        max_attempts_per_disk=5000,
-        base_seed=100
-    )
-    # 在这里指定要拼到一起的四类；也可改为 (1, 2, 3, 4, 5, 6)。
-    plot_rock_overview(results, rock_types=(1, 2, 3, 4, 5, 6))
+    for i in range(100):
+        results = generate_all_rock_types(
+                nx=256,
+                ny=256,
+                log_mean=2.0,
+                r_min=2.0,
+                r_max=18.0,
+                max_attempts_per_disk=5000,
+                base_seed=100
+        )
+        # 在这里指定要拼到一起的四类；也可改为 (1, 2, 3, 4, 5, 6)。
+        plot_rock_overview(results, rock_types=(1, 2, 3, 4, 5, 6), i = i, show=False)
 
 if __name__ == "__main__":
     main()

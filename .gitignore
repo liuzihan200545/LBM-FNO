@@ -7,5 +7,8 @@ wheels/
 *.egg-info
 tmp/
 
+# 2d and 3d data 
+src/geometry/output/
+
 # Virtual environments
 .venv
