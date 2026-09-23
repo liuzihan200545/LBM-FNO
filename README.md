@@ -29,6 +29,7 @@ uv run --locked python src/geometry/disk_pack3d.py --boundary wall --porosity 0.
 - `spheres.npz`：球心 `centers` 和半径 `radii`，单位为盒子边长。
 - `solid.npy`：体素数组，顺序 `[z, y, x]`，固体为 1、孔隙为 0。
 - `preview.png`：三维预览。
+- `preview.html`：离线交互式三维预览，用浏览器打开；拖动旋转、滚轮缩放、右键拖动平移，顶部按钮切换透明度。周期边界下每个原始球仅显示一次，边缘球可伸出盒子。
 - `metadata.json`：参数、最小间隙和体素孔隙率。
 
 `--resolution 0` 跳过体素生成。连续几何孔隙率与离散体素孔隙率有离散误差；目标孔隙率低于本次密堆积能达到的值时会报错。

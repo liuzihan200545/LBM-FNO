@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from pathlib import Path
+import time
 
 @dataclass
 class Circle:
@@ -296,6 +297,10 @@ def plot_rock_overview(results, rock_types=(3, 4, 5, 6), i = 0, show=True):
 
 
 def main():
+    N_samples = 100  # 生成几组不同的岩石类型组合
+
+    start = time.perf_counter()
+
     # 示例1：生成单个岩石类型
     # gen, solid, pore = generate_one_rock_type(
     #     rock_type=1,   # 改成 1~6
@@ -310,7 +315,7 @@ def main():
     # )
 
     # 如果你想生成全部 6 类，把上面注释掉，改用这个：
-    for i in range(100):
+    for i in range(N_samples):
         results = generate_all_rock_types(
                 nx=256,
                 ny=256,
@@ -322,6 +327,11 @@ def main():
         )
         # 在这里指定要拼到一起的四类；也可改为 (1, 2, 3, 4, 5, 6)。
         plot_rock_overview(results, rock_types=(1, 2, 3, 4, 5, 6), i = i, show=False)
+
+        end = time.perf_counter()
+
+        print(f"程序总耗时: {end-start:.3f} s")
+        print(f"平均每组耗时: {(end-start)/(N_samples):.3f} s")
 
 if __name__ == "__main__":
     main()

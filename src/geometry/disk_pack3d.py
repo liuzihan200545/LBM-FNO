@@ -8,6 +8,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 import rcpgenerator
 
 # PyCharm 中直接运行时使用这些参数。
@@ -115,10 +116,64 @@ def generate(n=N_SPHERES, variance=RADIUS_VARIANCE, porosity=POROSITY,
         np.save(output/'solid.npy', solid)
         metadata['voxel_porosity'] = float(1-solid.mean())
     preview(centers, radii, output/'preview.png', porosity)
+    interactive_preview(centers, radii, output/'preview.html', porosity, boundary)
     (output/'metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
     print(json.dumps(metadata, indent=2))
     print(f'Saved to: {output.resolve()}')
     return centers, radii
+
+
+def interactive_preview(centers, radii, path, porosity, boundary):
+    """离线 HTML 三维视图：拖动旋转、滚轮缩放，按钮切换透明度。"""
+    # 合并所有球的三角网格，避免为每个球创建独立绘图对象。
+    segments, rings = 24, 16
+    theta, phi = np.meshgrid(np.linspace(0, 2*np.pi, segments, endpoint=False),
+                             np.linspace(0, np.pi, rings))
+    unit = np.column_stack((np.sin(phi).ravel()*np.cos(theta).ravel(),
+                            np.sin(phi).ravel()*np.sin(theta).ravel(),
+                            np.cos(phi).ravel()))
+    faces = []
+    for row in range(rings-1):
+        for col in range(segments):
+            a = row*segments+col
+            b = row*segments+(col+1) % segments
+            faces.extend(((a, b, a+segments), (b, b+segments, a+segments)))
+    vertices = (centers[:, None, :]+radii[:, None, None]*unit).reshape(-1, 3)
+    triangles = (np.asarray(faces)[None, :, :]
+                 + np.arange(len(radii))[:, None, None]*len(unit)).reshape(-1, 3)
+    fig = go.Figure(go.Mesh3d(
+        x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
+        i=triangles[:, 0], j=triangles[:, 1], k=triangles[:, 2],
+        intensity=np.repeat(radii, len(unit)), colorscale='Viridis',
+        colorbar=dict(title='Radius'), showscale=True,
+        hovertemplate='x=%{x:.3f}<br>y=%{y:.3f}<br>z=%{z:.3f}<extra></extra>',
+        lighting=dict(ambient=0.35, diffuse=0.8, specular=0.25, roughness=0.5)))
+    edges = []
+    for axis in range(3):
+        for first in (0, 1):
+            for second in (0, 1):
+                start = [first, second]
+                start.insert(axis, 0)
+                end = start.copy()
+                end[axis] = 1
+                edges.extend((start, end, [None]*3))
+    fig.add_trace(go.Scatter3d(
+        x=[p[0] for p in edges], y=[p[1] for p in edges], z=[p[2] for p in edges],
+        mode='lines', line=dict(color='#334155', width=3), hoverinfo='skip', showlegend=False))
+    fig.update_layout(
+        title=f'{len(radii)} spheres | porosity={porosity:.3f} | {boundary}',
+        template='plotly_white', margin=dict(l=0, r=0, t=100, b=55),
+        scene=dict(aspectmode='data', dragmode='orbit',
+                   xaxis=dict(title='x'), yaxis=dict(title='y'), zaxis=dict(title='z')),
+        updatemenus=[dict(type='buttons', direction='left', x=0, y=1.08,
+                         buttons=[dict(label=label, method='restyle', args=[{'opacity': value}, [0]])
+                                  for label, value in [('Opaque', 1), ('Transparent', 0.3)]])],
+        annotations=[dict(text='Drag: rotate | Scroll: zoom | Right-drag: pan'
+                          '<br>Periodic view shows each original sphere once; edge spheres may extend outside the box.'
+                          if boundary == 'periodic' else 'Drag: rotate | Scroll: zoom | Right-drag: pan',
+                          x=0.5, y=-0.06, xref='paper', yref='paper', showarrow=False)])
+    fig.write_html(path, include_plotlyjs=True, full_html=True,
+                   config={'scrollZoom': True, 'displaylogo': False})
 
 
 def main():
