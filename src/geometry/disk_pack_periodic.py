@@ -1,9 +1,11 @@
 """二维周期 RSA 圆盘堆积：越界圆盘从对侧回绕，输出实心体素和预览。"""
 
 import argparse
+import itertools
 import json
 from pathlib import Path
 
+import ezdxf
 import matplotlib
 
 matplotlib.use("Agg")
@@ -76,6 +78,34 @@ def save_preview(solid, path, tiled=False):
     plt.close(fig)
 
 
+def save_comsol_dxf(centers, radii, nx, ny, output):
+    """导出 COMSOL 二维几何：矩形单元和含周期镜像的圆盘。"""
+    cell = ezdxf.new("R2010")
+    cell.header["$INSUNITS"] = 0  # 无物理单位；一个绘图单位对应一个像素
+    cell.modelspace().add_lwpolyline(
+        [(0, 0), (nx, 0), (nx, ny), (0, ny)], close=True)
+    cell.saveas(output/"unit_cell.dxf")
+
+    disks = ezdxf.new("R2010")
+    disks.header["$INSUNITS"] = 0
+    model = disks.modelspace()
+    circles = 0
+    for center, radius in zip(centers, radii):
+        shifts = []
+        for coordinate, length in zip(center, (nx, ny)):
+            choices = [0]
+            if coordinate-radius < 0:
+                choices.append(length)
+            if coordinate+radius > length:
+                choices.append(-length)
+            shifts.append(choices)
+        for sx, sy in itertools.product(*shifts):
+            model.add_circle((center[0]+sx, center[1]+sy), float(radius))
+            circles += 1
+    disks.saveas(output/"periodic_disks.dxf")
+    return circles
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nx", type=int, default=256)
@@ -99,11 +129,13 @@ def main():
     np.savez_compressed(output/"disks.npz", centers=centers, radii=radii)
     save_preview(solid, output/"preview.png")
     save_preview(solid, output/"tiled_preview.png", tiled=True)
+    dxf_circles = save_comsol_dxf(centers, radii, args.nx, args.ny, output)
     crosses = np.any((centers-radii[:, None] < 0) |
                      (centers+radii[:, None] > (args.nx, args.ny)), axis=1)
     metadata = dict(parameters, placed_disks=len(radii),
                     boundary="periodic", crossing_disks=int(crosses.sum()),
-                    porosity=float(1-solid.mean()), array_order="solid[x, y]")
+                    porosity=float(1-solid.mean()), array_order="solid[x, y]",
+                    dxf_circles=dxf_circles, dxf_coordinate_unit="pixel")
     (output/"metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(json.dumps(metadata, indent=2))
     print(f"Saved to: {output.resolve()}")
