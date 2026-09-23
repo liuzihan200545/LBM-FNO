@@ -1,142 +1,120 @@
 # LBM-FNO
 
-## 环境（WSL Ubuntu）
+用于构建二维、三维多孔介质几何，并探索基于孔隙流场的渗透率计算。仓库已有几何生成脚本和部分 LBM/XLB 示例；论文中的完整三维流场数据集与 FNO 训练流程尚未实现。
 
-项目使用 Python 3.11 和 uv，已有虚拟环境位于 `.venv`。在 WSL 终端执行：
+## 环境与快速运行
+
+建议在 WSL Ubuntu 中使用 Python 3.11 和 [uv](https://docs.astral.sh/uv/)。进入项目目录后安装锁定的依赖：
 
 ```bash
 cd /home/liuzihan/LBM-FNO
 uv sync --locked
+```
+
+首次构建 RCPGenerator 需要 Git、C++ 编译器和 OpenMP；Ubuntu 可安装 `git` 和 `build-essential`。该依赖的源码提交已固定在 `pyproject.toml` 中，完整依赖版本见 `uv.lock`。
+
+PyCharm 使用 WSL 解释器 `/home/liuzihan/LBM-FNO/.venv/bin/python`。直接运行脚本时，输出路径相对于脚本位置确定，不依赖当前工作目录。
+
+| 脚本 | 用途 | 默认边界 |
+| --- | --- | --- |
+| `src/geometry/disk_pack3d.py` | 三维球堆积、体素和表面网格 | 周期边界 |
+| `src/geometry/disk_pack_periodic.py` | 二维周期 RSA 圆盘堆积 | 周期边界 |
+| `src/geometry/disk_pack.py` | 原有二维 RSA 圆盘堆积 | 圆盘必须完整位于盒内 |
+
+## 三维周期球堆积
+
+```bash
 uv run --locked python src/geometry/disk_pack3d.py
 ```
 
-首次从源码构建 RCPGenerator 需要 Git、C++ 编译器和 OpenMP（Ubuntu 可用 `sudo apt install git build-essential`）。该依赖固定到官方仓库的提交，地址见 `pyproject.toml`，完整依赖见 `uv.lock`。
-
-PyCharm 请选择 **WSL / Ubuntu-24.04.3** 中的现有解释器：
-`/home/liuzihan/LBM-FNO/.venv/bin/python`，然后运行 `src/geometry/disk_pack3d.py`。
-
-## 三维球堆积
-
-默认生成 300 个球、目标孔隙率 0.50、128³ 体素，并采用周期边界：穿过立方体边界的球体会在对侧接续。可修改脚本顶部默认值或使用参数：
+默认生成 300 个球，目标孔隙率为 0.50，体素分辨率为 `128³`。`periodic` 模式会把穿过单位立方体边界的球体接续到对侧，适合构建周期计算单元。可以用命令行参数覆盖默认值：
 
 ```bash
-uv run --locked python src/geometry/disk_pack3d.py --n 300 --porosity 0.5 --resolution 128
+uv run --locked python src/geometry/disk_pack3d.py --n 300 --porosity 0.5 --resolution 128 --boundary periodic
 uv run --locked python src/geometry/disk_pack3d.py --boundary wall --porosity 0.6 --output tmp/wall
 ```
 
-结果默认保存在 `src/geometry/output/spheres_3d/`：
+边界模式的区别：
 
-- `spheres.npz`：球心 `centers` 和半径 `radii`，单位为盒子边长。
-- `solid.npy`：体素数组，顺序 `[z, y, x]`，固体为 1、孔隙为 0。
-- `solid.vti`：与 `solid.npy` 相同的体素模型，坐标轴为 x/y/z，可在 ParaView 中直接打开。选择 `solid` 后显示 `Volume`，或使用 `Threshold` 过滤出值为 1 的固体。
-- `preview.png`：三维预览。
-- `preview.html`：离线交互式三维预览，用浏览器打开；拖动旋转、滚轮缩放、右键拖动平移，顶部按钮切换透明度。
-- `surface_mesh.npz`：实际生成的实心球表面三角网格，含 `vertices` 和 `faces`。周期模式会把越界球体在对侧补齐，再裁切到单位立方体并封口。它是闭合网格，可用于体积计算；由于表面为有限三角形近似，体积与 `solid.npy` 的体素估计会有差异。
-- `surface_mesh.vtp`：同一表面网格的 ParaView 格式，用 ParaView 打开后选择 `Surface` 即可查看球体。
-- `metadata.json`：参数、最小间隙和体素孔隙率。
+| `--boundary` | 几何处理 |
+| --- | --- |
+| `periodic` | 越界球体在对侧接续；默认模式。 |
+| `clip` | 仅保留立方体内的部分，不在对侧接续。 |
+| `wall` | 每个球完整位于立方体内。 |
 
-`--resolution 0` 跳过体素生成。默认 `periodic` 模式在对侧回绕越界球体；`--boundary clip` 仅截断盒外部分，不在对侧接续；`--boundary wall` 则让完整球体位于盒内。`clip` 模式的 `porosity` 参数仍按完整球体积设定，裁切后盒内实际孔隙率请看 `metadata.json` 中的 `voxel_porosity`。目标孔隙率低于本次密堆积能达到的值时会报错。
+默认输出目录为 `src/geometry/output/spheres_3d/`：
 
-## GPU 验证范围
+| 文件 | 内容和用途 |
+| --- | --- |
+| `solid.npy` | 实心体素数组，轴顺序为 `[z, y, x]`；`1` 为固体，`0` 为孔隙。 |
+| `solid.vti` | 与 `solid.npy` 相同的体素数据，供 ParaView 使用；标量名为 `solid`。 |
+| `surface_mesh.vtp` | 已在立方体边界截断并封口的球体表面，可在 ParaView 中直接显示。 |
+| `surface_mesh.npz` | 同一闭合表面网格的 NumPy 文件：`vertices` 为坐标，`faces` 为三角面索引。 |
+| `spheres.npz` | 原始球心 `centers` 和半径 `radii`，坐标按盒子边长归一化。边界球仍以完整球参数记录。 |
+| `preview.html` | 离线交互式三维预览，可旋转、缩放并切换透明度。 |
+| `preview.png` | 固定视角预览图。 |
+| `metadata.json` | 参数、最小球间隙和体素孔隙率。 |
 
-三维球堆积脚本使用 CPU，不需要 CUDA。当前环境已验证 JAX 可以在 RTX 4060 上执行计算；为避免默认预分配过多显存，运行 JAX 程序时可设置：
+`--resolution 0` 可跳过体素生成。`clip` 模式的 `--porosity` 按完整球体积设定；裁切后的实际孔隙率应查看 `metadata.json` 中的 `voxel_porosity`。表面网格使用有限数量的三角形近似球面，因此由网格计算的体积与体素估计可能略有差异。
+
+### 在 ParaView 中查看
+
+- **直接看球体表面**：打开 `surface_mesh.vtp`，点击 **Apply**，显示方式选 **Surface**；若视图空白，点 **Reset Camera**。
+- **查看实心体素**：打开 `solid.vti` 并点击 **Apply**。如果只看到白色外框，先在 Pipeline Browser 中选中该文件，然后添加 **Threshold**；选择 **Cell Data → solid**，范围设为 **1 到 1**，再点击 **Apply**。选中生成的过滤结果，将显示方式设为 **Surface**。白框是原始数据的 **Outline** 显示方式。
+
+## 二维周期圆盘堆积
+
+```bash
+uv run --locked python src/geometry/disk_pack_periodic.py
+```
+
+脚本使用周期最短距离判断圆盘是否重叠，并把越界部分回绕到对侧。默认在 `256 × 256` 网格中尝试放置 100 个圆盘。可用 `--nx`、`--ny`、`--n-disks`、`--seed`、`--r-min` 和 `--r-max` 等参数调整。
+
+结果保存在 `src/geometry/output/disks_periodic/`：
+
+| 文件 | 内容 |
+| --- | --- |
+| `solid.npy` / `pore.npy` | 二维掩膜，轴顺序为 `[x, y]`；分别以 `1` 表示固体和孔隙。 |
+| `disks.npz` | 圆心 `centers` 与半径 `radii`，坐标单位为像素。 |
+| `preview.png` | 单个周期单元。 |
+| `tiled_preview.png` | `2 × 2` 平铺图；红线标记单元边界，便于检查跨边界接续。 |
+| `metadata.json` | 生成参数、实际放置数、跨边界圆盘数和孔隙率。 |
+
+圆盘密度过高时，RSA 可能无法放满指定数量并提前停止。实际放置数见 `placed_disks`。原有的 `disk_pack.py` 使用不同的边界规则：圆盘必须完整留在盒内，不会跨边界回绕。
+
+## 论文方法与三维扩展
+
+仓库中的相关论文见 `docs/`。IFEDC 论文讨论的是**二维周期孔隙单元**：先用 LBM 计算流场，再对速度做全域平均，通过达西关系得到渗透率。网络预测的是速度场和压力场，渗透率由预测速度进一步计算。
+
+对于同一个二维几何，分别沿 $x$、$y$ 方向施加大小为 $f_0$ 的均匀体积力。外边界为周期边界，固体表面为无滑移边界。每次求解得到两个速度分量。以 $x$ 方向驱动为例，全域平均速度为
+
+$$
+\langle u_x^{(x)}\rangle_\Omega
+=\frac{1}{|\Omega|}\int_{\Omega_f}u_x^{(x)}\,\mathrm d\Omega.
+$$
+
+积分只在孔隙区域进行，但分母是**整个计算单元的面积**。在均匀网格中，若 `pore` 为孔隙取 `1`、固体取 `0` 的掩膜，可以直接计算 `np.mean(ux * pore)`。仅对孔隙速度取平均得到的是另一种平均量。
+
+二维渗透率张量由两次方向驱动的响应组成：
+
+$$
+\mathbf K=\frac{\mu}{f_0}
+\begin{pmatrix}
+\langle u_x^{(x)}\rangle_\Omega & \langle u_x^{(y)}\rangle_\Omega \\
+\langle u_y^{(x)}\rangle_\Omega & \langle u_y^{(y)}\rangle_\Omega
+\end{pmatrix}.
+$$
+
+其中 $\mu$ 为动力黏度，上标表示驱动方向，下标表示速度分量。压力场用于流场预测和训练，但此处的渗透率计算直接使用平均速度。
+
+扩展到三维球体时，应在相同几何上分别沿 $x$、$y$、$z$ 方向驱动，计算三个速度分量，并组成 $3 × 3$ 的渗透率张量。这是对二维论文方法的扩展；三维 LBM 格子、收敛设置和物理单位换算需要另行确定。格子单位下的数值不能未经换算就标成 Darcy。
+
+## 运行环境说明
+
+几何生成脚本在 CPU 上运行，不需要 CUDA。现有 XLB/JAX 示例使用 `XLA_PYTHON_CLIENT_PREALLOCATE=false` 限制显存预分配；运行其他 JAX 程序时也可先设置：
 
 ```bash
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
 
-现有 XLB/JAX 示例已在代码中设置此项。Warp 1.12.1 在当前驱动环境下仅检测到 CPU，Warp GPU 后端尚不可用；不影响上述球堆积脚本。未验证所有求解器的完整仿真。
-
-文件	用途
-preview.html	交互式查看：用浏览器打开，可旋转、缩放和切换透明度。
-preview.png	固定视角的图片，适合快速查看。
-solid.npy	实心体素模型，形状为 (128, 128, 128)，轴顺序是 [z, y, x]；1 表示球体，0 表示孔隙。用于栅格计算最方便。
-surface_mesh.npz	裁切并封口后的闭合三角网格。vertices 是顶点坐标，faces 是三角面顶点索引；适合三维建模或网格分析。
-spheres.npz	原始球的参数：centers 是球心，radii 是半径。边界球在这里仍以完整球表示；要使用裁切后的实体，请读 solid.npy 或 surface_mesh.npz。
-metadata.json	生成参数和统计值，包括球数、随机种子、边界模式、最小间隙和实际体素孔隙率。
-
-
-论文的核心思路是：**先得到岩石孔隙中的速度场，再对速度场求平均，利用达西定律计算渗透率。神经网络负责预测流场，不直接输出渗透率。**
-
-以你后来发的 IFEDC 论文为例，流程如下。
-
-**1. 对同一个岩石结构，分别施加两个方向的驱动力**
-
-在孔隙中求解稳态流动，固体表面满足无滑移条件，计算区域外边界采用周期条件。
-
-分别做两次计算：
-
-- x 方向施加体力：\(\mathbf f^{(x)}=(f_0,0)\)；
-- y 方向施加体力：\(\mathbf f^{(y)}=(0,f_0)\)。
-
-每次都得到两个速度分量。即使沿 x 驱动，水流绕过颗粒时也会产生 y 方向速度。
-
-**2. 计算整个岩石单元内的平均速度**
-
-以 x 驱动为例：
-
-\[
-\left\langle u_x^{(x)}\right\rangle_\Omega
-=\frac{1}{|\Omega|}
-\int_{\Omega_f}u_x^{(x)}\,d\Omega
-\]
-
-这里积分只来自孔隙，但**分母是包含固体的整个计算区域面积**。这是达西速度对应的平均方式。
-
-对均匀网格，可以将固体速度设为零后直接求平均：
-
-```python
-mean_ux = np.mean(ux * pore)
-```
-
-其中 `pore` 是**孔隙为 1、固体为 0**的掩膜。
-
-如果使用 `ux[pore == 1].mean()`，得到的是孔隙内平均速度，还需要乘以孔隙率才能得到上述全域平均值。
-
-**3. 用平均速度和驱动力计算渗透率**
-
-论文第 4 页式（3）给出：
-
-\[
-\mathbf K=
-\frac{\mu}{f_0}
-\begin{pmatrix}
-\left\langle u_x^{(x)}\right\rangle_\Omega &
-\left\langle u_x^{(y)}\right\rangle_\Omega\\
-\left\langle u_y^{(x)}\right\rangle_\Omega &
-\left\langle u_y^{(y)}\right\rangle_\Omega
-\end{pmatrix}
-\]
-
-其中：
-
-- \(\mu\)：动力黏度；
-- \(f_0\)：体力幅值，按论文方程具有压力梯度的量纲；
-- 第一列来自 x 驱动，第二列来自 y 驱动；
-- \(K_{xx},K_{yy}\) 表示主方向渗透能力；
-- \(K_{xy},K_{yx}\) 表示两个方向之间的耦合响应。
-
-对应代码为：
-
-```python
-K = mu / f0 * np.array([
-    [(ux_x * pore).mean(), (ux_y * pore).mean()],
-    [(uy_x * pore).mean(), (uy_y * pore).mean()],
-])
-```
-
-这里 `ux_y` 表示“**y 驱动时的 x 速度**”。
-
-**4. 神经网络替代耗时的流场求解**
-
-训练阶段，论文用 LBM 生成参考速度、压力场，让网络学习：
-
-```text
-岩石几何特征 + 驱动方向 → 速度场、压力场
-```
-
-预测新岩石时，网络分别预测 x、y 驱动下的流场，再代入同一个平均公式计算 \(\mathbf K\)。压力用于场预测和训练，但上述渗透率公式直接使用的是速度。
-
-旧论文重点计算**指定驱动方向的渗透率分量**；新论文扩展为**完整二维渗透率张量**，并检查 \(K_{xy}\approx K_{yx}\) 的物理一致性。
-
-对于你现在的三维球模型，按同样思路需要做 **x、y、z 三次驱动**，得到 \(3\times3\) 渗透率张量。另外，若使用格子单位，结果不能直接标成 Darcy；必须根据网格的实际物理长度完成单位换算。
+仓库中的求解器示例尚未作为完整的三维论文复现流程验证。
