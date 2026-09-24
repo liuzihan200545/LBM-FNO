@@ -131,6 +131,12 @@ def generate(n=N_SPHERES, variance=RADIUS_VARIANCE, porosity=POROSITY,
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(output/'spheres.npz', centers=centers, radii=radii)
+    try:
+        from .export_comsol_java import export_comsol_java
+    except ImportError:
+        from export_comsol_java import export_comsol_java
+    export_comsol_java(centers, radii, output/'PeriodicSphereCell.java',
+                       boundary=boundary)
     metadata = dict(n=n, variance=variance, variance_mode=variance_mode,
                     porosity=porosity, seed=seed, resolution=resolution,
                     boundary=boundary, minimum_gap=gap,
@@ -208,6 +214,7 @@ def interactive_preview(centers, radii, path, porosity, boundary, mesh_path=None
         surface = pv.PolyData(vertices, faces)
         surface.point_data['radius'] = intensity
         surface.save(mesh_path.with_suffix('.vtp'))
+        surface.save(mesh_path.with_suffix('.stl'), binary=True)
     fig = go.Figure(go.Mesh3d(
         x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
         i=triangles[:, 0], j=triangles[:, 1], k=triangles[:, 2],
