@@ -1,0 +1,50 @@
+{
+  "source_paper": "IFEDC202621768, section 3.2",
+  "solid_file": "/home/liuzihan/LBM-FNO/src/geometry/output/disks_periodic/solid.npy",
+  "shape_xy": [
+    256,
+    256
+  ],
+  "porosity": 0.7566375732421875,
+  "paper_resolution_match": false,
+  "boundary": "periodic xy",
+  "solid_bc": "halfway bounce-back",
+  "model": "D2Q9 BGK",
+  "omega": 1.0,
+  "force_lattice": 0.0004,
+  "convergence_rtol": 1e-06,
+  "convergence_check_interval": 500,
+  "runs": {
+    "x": {
+      "steps": 30000,
+      "converged": false,
+      "relative_change": 0.002003815257921815,
+      "max_speed": 0.17727413773536682,
+      "mean_velocity_xy": [
+        0.029384851455688477,
+        -0.0003149649128317833
+      ]
+    },
+    "y": {
+      "steps": 30000,
+      "converged": false,
+      "relative_change": 0.0019725370220839977,
+      "max_speed": 0.20265552401542664,
+      "mean_velocity_xy": [
+        -0.0002717812894843519,
+        0.02666000835597515
+      ]
+    }
+  },
+  "permeability_lattice_squared": [
+    [
+      12.243688106536863,
+      -0.11324220395181327
+    ],
+    [
+      -0.13123538034657636,
+      11.108336814989645
+    ]
+  ],
+  "symmetry_residual": 0.0010883328314789209
+}
