@@ -12,39 +12,41 @@
   "model": "D2Q9 BGK",
   "omega": 1.0,
   "force_lattice": 0.0004,
+  "precision": "fp64",
   "convergence_rtol": 1e-06,
   "convergence_check_interval": 500,
   "runs": {
     "x": {
-      "steps": 30000,
-      "converged": false,
-      "relative_change": 0.002003815257921815,
-      "max_speed": 0.17727413773536682,
+      "steps": 4000,
+      "converged": true,
+      "relative_change": 5.480043117126998e-07,
+      "max_speed": 0.17737902526127425,
       "mean_velocity_xy": [
-        0.029384851455688477,
-        -0.0003149649128317833
+        0.029383971485610613,
+        -0.0003171633962955544
       ]
     },
     "y": {
-      "steps": 30000,
-      "converged": false,
-      "relative_change": 0.0019725370220839977,
-      "max_speed": 0.20265552401542664,
+      "steps": 4000,
+      "converged": true,
+      "relative_change": 4.358968337976389e-07,
+      "max_speed": 0.20267524688627858,
       "mean_velocity_xy": [
-        -0.0002717812894843519,
-        0.02666000835597515
+        -0.00027276885791513634,
+        0.026664780141615538
       ]
     }
   },
+  "all_directions_converged": true,
   "permeability_lattice_squared": [
     [
-      12.243688106536863,
-      -0.11324220395181327
+      12.243321452337755,
+      -0.11365369079797347
     ],
     [
-      -0.13123538034657636,
-      11.108336814989645
+      -0.13215141512314765,
+      11.110325059006474
     ]
   ],
-  "symmetry_residual": 0.0010883328314789209
+  "symmetry_residual": 0.0011187781327320107
 }

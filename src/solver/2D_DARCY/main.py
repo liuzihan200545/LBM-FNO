@@ -44,21 +44,28 @@ def load_solid(path):
 class DarcyFlow2D:
     """One driving direction; XLB arrays have (q, x, y) order."""
 
-    def __init__(self, solid, direction="x", omega=1.0, force=4.0e-4):
+    def __init__(self, solid, direction="x", omega=1.0, force=4.0e-4,
+                 precision="fp64"):
         if direction not in ("x", "y"):
             raise ValueError("direction must be x or y")
         if not 0.0 < omega < 2.0 or force <= 0.0:
             raise ValueError("Require 0 < omega < 2 and force > 0")
+        if precision not in ("fp32", "fp64"):
+            raise ValueError("precision must be fp32 or fp64")
         self.solid = np.asarray(solid, dtype=bool)
         self.nx, self.ny = self.solid.shape
         self.direction, self.omega, self.force = direction, omega, force
+        self.precision = precision
         self.nu = (1.0 / omega - 0.5) / 3.0  # rho_ref=1; mu=nu in lattice units
 
         backend = ComputeBackend.JAX
-        precision = PrecisionPolicy.FP32FP32
-        self.velocity_set = D2Q9(precision_policy=precision, compute_backend=backend)
+        if precision == "fp64":
+            jax.config.update("jax_enable_x64", True)
+        policy = (PrecisionPolicy.FP64FP64 if precision == "fp64"
+                  else PrecisionPolicy.FP32FP32)
+        self.velocity_set = D2Q9(precision_policy=policy, compute_backend=backend)
         xlb.init(velocity_set=self.velocity_set, default_backend=backend,
-                 default_precision_policy=precision)
+                 default_precision_policy=policy)
         grid = grid_factory((self.nx, self.ny), compute_backend=backend)
 
         # The XLB masker pads the exterior. We replace its masks below so that
@@ -70,7 +77,7 @@ class DarcyFlow2D:
         ])
         boundary = HalfwayBounceBackBC(indices=np.array(np.where(surface)).tolist())
         vector = np.array((force, 0.0) if direction == "x" else (0.0, force),
-                          dtype=np.float32)
+                          dtype=np.float64 if precision == "fp64" else np.float32)
         self.stepper = IncompressibleNavierStokesStepper(
             grid=grid, boundary_conditions=[boundary], collision_type="BGK",
             forcing_scheme="exact_difference", force_vector=vector,
@@ -104,7 +111,8 @@ class DarcyFlow2D:
         relative_change = None
         converged = False
         print(f"{self.direction}-drive: grid={self.nx}x{self.ny}, "
-              f"omega={self.omega:g}, nu={self.nu:g}, force={self.force:g}; "
+              f"omega={self.omega:g}, nu={self.nu:g}, force={self.force:g}, "
+              f"precision={self.precision}; "
               f"JAX devices={jax.devices()}", flush=True)
         for step in range(1, steps + 1):
             self.f0, self.f1 = self.stepper(
@@ -140,6 +148,8 @@ def main(argv=None):
     parser.add_argument("--omega", type=float, default=1.0)
     parser.add_argument("--force", type=float, default=4.0e-4,
                         help="lattice-unit acceleration, not SI N/m^3")
+    parser.add_argument("--precision", choices=("fp32", "fp64"), default="fp64",
+                        help="fp64 is recommended for velocity-field convergence")
     parser.add_argument("--steps", type=int, default=30000)
     parser.add_argument("--check-interval", type=int, default=500)
     parser.add_argument("--min-steps", type=int, default=1000)
@@ -160,12 +170,14 @@ def main(argv=None):
         "boundary": "periodic xy",
         "solid_bc": "halfway bounce-back", "model": "D2Q9 BGK",
         "omega": args.omega, "force_lattice": args.force,
+        "precision": args.precision,
         "convergence_rtol": args.rtol, "convergence_check_interval": args.check_interval,
         "runs": {},
     }
     means = {}
     for direction in directions:
-        simulation = DarcyFlow2D(solid, direction, args.omega, args.force)
+        simulation = DarcyFlow2D(solid, direction, args.omega, args.force,
+                                 args.precision)
         info = simulation.run(args.steps, args.check_interval, args.min_steps, args.rtol)
         rho, ux, uy, pressure = simulation.fields()
         # Darcy velocity averages over the whole cell, with solids set to zero.
@@ -177,6 +189,9 @@ def main(argv=None):
                             rho=rho, ux=ux, uy=uy, pressure=pressure)
         print(f"  <u>_cell={mean_velocity.tolist()} (lattice units)", flush=True)
 
+    summary["all_directions_converged"] = all(
+        summary["runs"][direction]["converged"] for direction in directions
+    )
     if len(means) == 2:
         mu = (1.0 / args.omega - 0.5) / 3.0
         tensor = mu / args.force * np.column_stack((means["x"], means["y"]))
@@ -186,6 +201,9 @@ def main(argv=None):
             max(np.linalg.norm(tensor), np.finfo(float).eps)
         )
         print("K (lattice length^2):\n", tensor, flush=True)
+    if not summary["all_directions_converged"]:
+        print("WARNING: at least one flow did not converge; saved results are provisional.",
+              flush=True)
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"Saved results to {args.output.resolve()}", flush=True)
 
