@@ -93,6 +93,37 @@ bash compile_comsol_java.sh
 
 STL 将球面离散为三角形；若需要精确球面，可使用 `spheres.npz` 中的球心和半径，在 COMSOL 中创建 Sphere 几何基元及相应周期镜像，再从块中做差集。不要把 `surface_mesh.vtp` 或 `solid.vti` 当成 COMSOL 可直接布尔运算的实体几何。
 
+### 角球与中心椭球测试单元
+
+`src/geometry/simple_ellipsoid_cell.py` 保留八个立方体角上的 $1/8$ 球，将中心球换成绕 $z$ 轴旋转的椭球。默认角球半径为 `0.28*L`，椭球三条半轴为 `(0.43, 0.18, 0.30)*L`，长轴在 $xy$ 平面内与 $x$ 轴成 $45^\circ$；默认 `L=256[um]`。原来的 `simple_sphere_cell.py` 保留，便于对照实验。
+
+```bash
+uv run --locked python src/geometry/simple_ellipsoid_cell.py
+```
+
+可用 `--center-axes A B C`、`--angle`、`--corner-radius`、`--length` 和 `--unit` 调整参数。脚本生成 `src/geometry/output/simple_ellipsoid_cell/SimpleEllipsoidCell.java` 和 `metadata.json`。COMSOL 6.3 编译并构建成功的几何模型位于 `E:\LBM-FNO-3D\COMSOL\resource\simple_ellipsoid_cell\SimpleEllipsoidCell_Model.mph`；它仅包含孔隙域几何，尚未包含物理场与求解结果。
+
+中心椭球的 $45^\circ$ 倾斜使 $x$、$y$ 方向不再各自具有镜面对称性，预期张量具有 $K_{xx}\approx K_{yy}$、$K_{xy}\approx K_{yx}\ne0$，且 $K_{xz},K_{yz}$ 接近零。若把椭球改成与坐标轴对齐，非对角项理论上应接近零。单个椭球带来的非对角项未必像下文的斜向贯通孔道那样大，具体数值仍需使用相同边界条件、黏度和体积力计算。
+
+### 非对角渗透率较大的简单三维单元
+
+运行 `src/geometry/diagonal_channel_cell.py` 可生成一个用于验证渗透率张量的周期孔隙单元。它在立方体中保留沿 $(1,1,0)$ 方向贯通的斜圆柱孔道，并用一条竖直孔道连通 $z$ 面；其余部分视为固体。斜孔道穿过相对的 $x$、$y$ 面时轮廓对应，竖直孔道穿过相对的 $z$ 面时轮廓对应。这样沿 $x$ 或 $y$ 施力都会产生明显的横向流速，预期 $K_{xy}$、$K_{yx}$ 与 $K_{xx}$、$K_{yy}$ 同量级；实际数值仍以流动求解结果为准。
+
+```bash
+uv run --locked python src/geometry/diagonal_channel_cell.py
+```
+
+默认边长 `L=256[um]`，斜孔道半径 `0.20*L`，竖直孔道半径 `0.11*L`。可用 `--length`、`--unit`、`--diagonal-radius`、`--vertical-radius` 调整。输出位于 `src/geometry/output/diagonal_channel_cell/`，其中 `DiagonalChannelCell.java` 使用 COMSOL 原生 Block、Cylinder 和布尔运算生成**孔隙流体域**，`metadata.json` 记录参数和估算孔隙率。在 WSL 中复制并编译：
+
+```bash
+target=/mnt/e/LBM-FNO-3D/COMSOL/resource/diagonal_channel_cell
+mkdir -p "$target"
+cp src/geometry/output/diagonal_channel_cell/DiagonalChannelCell.java "$target/"
+/mnt/d/COMSOL63/Multiphysics/bin/win64/comsolcompile.exe "$(wslpath -w "$target/DiagonalChannelCell.java")"
+```
+
+在 COMSOL 中通过 **文件 → 打开** 选择 `E:\LBM-FNO-3D\COMSOL\resource\diagonal_channel_cell\DiagonalChannelCell.class`；也可以直接打开已生成的 `E:\LBM-FNO-3D\COMSOL\resource\diagonal_channel_cell\DiagonalChannelCell_Model.mph`。此文件只有几何，还需给孔道内壁设置无滑移，给三组相对外表面分别设置周期流动条件，并按照下文的三维公式计算渗透率张量。
+
 ## 二维周期圆盘堆积
 
 ```bash
@@ -180,7 +211,23 @@ $$
 
 其中 $\mu$ 为动力黏度，上标表示驱动方向，下标表示速度分量。压力场用于流场预测和训练，但此处的渗透率计算直接使用平均速度。
 
-扩展到三维球体时，应在相同几何上分别沿 $x$、$y$、$z$ 方向驱动，计算三个速度分量，并组成 $3 × 3$ 的渗透率张量。这是对二维论文方法的扩展；三维 LBM 格子、收敛设置和物理单位换算需要另行确定。格子单位下的数值不能未经换算就标成 Darcy。
+扩展到三维球体时，在同一周期立方体上分别施加 $\mathbf f^{(x)}=(f_0,0,0)$、$\mathbf f^{(y)}=(0,f_0,0)$、$\mathbf f^{(z)}=(0,0,f_0)$，每次求解得到速度分量 $(u_x,u_y,u_z)$。三维渗透率张量由三次响应按**列**组成：
+
+$$
+\mathbf K=\frac{\mu}{f_0}
+\begin{pmatrix}
+\langle u_x^{(x)}\rangle_\Omega & \langle u_x^{(y)}\rangle_\Omega & \langle u_x^{(z)}\rangle_\Omega \\
+\langle u_y^{(x)}\rangle_\Omega & \langle u_y^{(y)}\rangle_\Omega & \langle u_y^{(z)}\rangle_\Omega \\
+\langle u_z^{(x)}\rangle_\Omega & \langle u_z^{(y)}\rangle_\Omega & \langle u_z^{(z)}\rangle_\Omega
+\end{pmatrix},
+\qquad
+\langle u_i^{(j)}\rangle_\Omega
+=\frac{1}{|\Omega|}\int_{\Omega_f}u_i^{(j)}\,\mathrm dV.
+$$
+
+其中 $i$ 表示速度分量，$j$ 表示体积力方向，$\mu$ 是动力黏度，$f_0$ 是物理体积力密度。积分只覆盖孔隙流体域，但分母是**整个立方体体积**，因此在边长为 $L$ 的 COMSOL 模型中为 $L^3$。若 `intop1` 选择全部流体域，一次参数化扫描的三个结果表达式可写为 `mu_calc*intop1(u)/(L^3*F0)`、`mu_calc*intop1(v)/(L^3*F0)`、`mu_calc*intop1(w)/(L^3*F0)`；扫描结果的 x、y、z 三行分别对应 $\mathbf K$ 的第一、第二、第三列。
+
+这是对二维论文方法的三维扩展；三维 LBM 格子、收敛设置和物理单位换算需要另行确定。格子单位下的数值不能未经换算就标成 Darcy。
 
 ## 运行环境说明
 
@@ -200,10 +247,13 @@ export XLA_PYTHON_CLIENT_PREALLOCATE=false
 - [x] 调研学习3d情况下如何使用comsol
 
 ## 2026-9-25 TODO:
-- [ ] 跑通COMSOL3D模拟
-- [ ] 计算三位渗透率张量
+- [x] 跑通COMSOL3D模拟
+- [x] 计算三位渗透率张量
+- [x] 完成2d情况下的xlb gpu并行
+
+## 2026-9-26 TODO:
+- [x] 研究不规则情况下的渗透率张量
 - [ ] 确定物理单位设计
-- [ ] 完成2d情况下的xlb大规模gpu并行
 - [ ] 研究二维情况下的个性化岩心生成
 - [ ] 研究三维情况下的个性化岩心生成
-
+- [ ] 研究如何可视化三维结果

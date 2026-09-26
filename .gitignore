@@ -9,6 +9,7 @@ tmp/
 
 # 2d and 3d data 
 src/geometry/output/
+reports/
 
 # Virtual environments
 .venv

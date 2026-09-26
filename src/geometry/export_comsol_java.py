@@ -3,6 +3,7 @@
 import argparse
 import itertools
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -25,7 +26,7 @@ def sphere_images(centers, radii, boundary):
 
 
 def export_comsol_java(centers, radii, path, *, boundary='periodic',
-                       length=256.0, unit='um'):
+                       length=256.0, unit='um', class_name='PeriodicSphereCell'):
     """Write a COMSOL model file for Java containing exact Sphere primitives."""
     centers = np.asarray(centers, dtype=float)
     radii = np.asarray(radii, dtype=float)
@@ -39,8 +40,10 @@ def export_comsol_java(centers, radii, path, *, boundary='periodic',
         raise ValueError('Length must be positive and unit must be um, mm, or m')
 
     path = Path(path)
-    if path.stem != 'PeriodicSphereCell' or path.suffix != '.java':
-        raise ValueError('The Java file must be named PeriodicSphereCell.java')
+    if not re.fullmatch(r'[A-Za-z_$][A-Za-z0-9_$]*', class_name):
+        raise ValueError('Invalid Java class name')
+    if path.stem != class_name or path.suffix != '.java':
+        raise ValueError(f'The Java file must be named {class_name}.java')
     images = list(sphere_images(centers, radii, boundary))
     rows = []
     for center, radius in images:
@@ -52,14 +55,15 @@ def export_comsol_java(centers, radii, path, *, boundary='periodic',
 import com.comsol.model.*;
 import com.comsol.model.util.*;
 
-public class PeriodicSphereCell {{
+public class {class_name} {{
   public static void main(String[] args) {{ run(); }}
 
   public static Model run() {{
     Model model = ModelUtil.create("Model");
     model.label("Periodic sphere pore cell");
     model.param().set("L", "{length:.17g}[{unit}]");
-    model.component().create("comp1");
+    // Keep spatial, material, geometry, and mesh frames explicitly defined.
+    model.component().create("comp1", true);
     GeomSequence g = model.component("comp1").geom().create("geom1", 3);
     g.lengthUnit("{unit}");
     g.create("blk1", "Block");
