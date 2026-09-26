@@ -16,13 +16,25 @@ import vtk
 from vtk.util.numpy_support import vtk_to_numpy
 
 # PyCharm 中直接运行时使用这些参数。
-N_SPHERES = 300
+N_SPHERES = 100
 RADIUS_VARIANCE = 0.35   # 归一化半径 E[R]=1 时的分布方差，非最终像素半径方差
-POROSITY = 0.50         # 最终孔隙体积分数，越大越疏松
+POROSITY = 0.4         # 最终孔隙体积分数，越大越疏松
 SEED = 42
 RESOLUTION = 128        # 体素模型边长；设为 0 可跳过体素生成
 BOUNDARY = 'periodic'   # periodic：周期边界；clip：截断盒外球体；wall：整球位于盒内
 OUTPUT = Path(__file__).resolve().parent/'output'/'spheres_3d'
+
+# 输出开关：设为 False 即跳过该文件的生成；不会删除输出目录里的旧文件。
+SAVE_SPHERES_NPZ = True       # 球心和半径：spheres.npz
+SAVE_COMSOL_JAVA = True       # COMSOL 原生几何：PeriodicSphereCell.java
+SAVE_SOLID_NPY = True         # 三维体素：solid.npy
+SAVE_SOLID_VTI = True         # ParaView 体素：solid.vti
+SAVE_PREVIEW_PNG = True       # 静态预览：preview.png
+SAVE_PREVIEW_HTML = True      # 交互预览：preview.html
+SAVE_SURFACE_NPZ = True       # 表面顶点、三角面：surface_mesh.npz
+SAVE_SURFACE_VTP = True       # ParaView 表面：surface_mesh.vtp
+SAVE_SURFACE_STL = True       # STL 表面：surface_mesh.stl
+SAVE_METADATA_JSON = True    # 参数摘要：metadata.json
 
 
 def minimum_gap(centers, radii, boundary):
@@ -97,7 +109,17 @@ def preview(centers, radii, path, porosity, boundary):
 
 def generate(n=N_SPHERES, variance=RADIUS_VARIANCE, porosity=POROSITY,
              seed=SEED, resolution=RESOLUTION, boundary=BOUNDARY,
-             output=OUTPUT, variance_mode='radius'):
+             output=OUTPUT, variance_mode='radius',
+             save_spheres_npz=SAVE_SPHERES_NPZ,
+             save_comsol_java=SAVE_COMSOL_JAVA,
+             save_solid_npy=SAVE_SOLID_NPY,
+             save_solid_vti=SAVE_SOLID_VTI,
+             save_preview_png=SAVE_PREVIEW_PNG,
+             save_preview_html=SAVE_PREVIEW_HTML,
+             save_surface_npz=SAVE_SURFACE_NPZ,
+             save_surface_vtp=SAVE_SURFACE_VTP,
+             save_surface_stl=SAVE_SURFACE_STL,
+             save_metadata_json=SAVE_METADATA_JSON):
     if not isinstance(n, int) or n < 2 or seed < 0:
         raise ValueError('Use integer n >= 2 and seed >= 0')
     if not np.isfinite(variance) or variance < 0 or not np.isfinite(porosity) or not 0 < porosity < 1:
@@ -130,13 +152,18 @@ def generate(n=N_SPHERES, variance=RADIUS_VARIANCE, porosity=POROSITY,
         raise RuntimeError(f'Packing overlaps or crosses walls: minimum gap={gap}')
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(output/'spheres.npz', centers=centers, radii=radii)
-    try:
-        from .export_comsol_java import export_comsol_java
-    except ImportError:
-        from export_comsol_java import export_comsol_java
-    export_comsol_java(centers, radii, output/'PeriodicSphereCell.java',
-                       boundary=boundary)
+    saved_files = []
+    if save_spheres_npz:
+        np.savez_compressed(output/'spheres.npz', centers=centers, radii=radii)
+        saved_files.append('spheres.npz')
+    if save_comsol_java:
+        try:
+            from .export_comsol_java import export_comsol_java
+        except ImportError:
+            from export_comsol_java import export_comsol_java
+        export_comsol_java(centers, radii, output/'PeriodicSphereCell.java',
+                           boundary=boundary)
+        saved_files.append('PeriodicSphereCell.java')
     metadata = dict(n=n, variance=variance, variance_mode=variance_mode,
                     porosity=porosity, seed=seed, resolution=resolution,
                     boundary=boundary, minimum_gap=gap,
@@ -144,19 +171,50 @@ def generate(n=N_SPHERES, variance=RADIUS_VARIANCE, porosity=POROSITY,
     if boundary == 'clip':
         metadata['porosity_note'] = ('porosity is computed from full sphere volumes; '
                                     'voxel_porosity measures the cropped cube')
-    if resolution:
+    if resolution and (save_solid_npy or save_solid_vti):
         solid = voxelize(centers, radii, resolution, boundary)
-        np.save(output/'solid.npy', solid)
-        grid = pv.ImageData(dimensions=(resolution+1,)*3,
-                            spacing=(1/resolution,)*3)
-        grid.cell_data['solid'] = solid.transpose(2, 1, 0).ravel(order='F')
-        grid.save(output/'solid.vti')
+        if save_solid_npy:
+            np.save(output/'solid.npy', solid)
+            saved_files.append('solid.npy')
+        if save_solid_vti:
+            grid = pv.ImageData(dimensions=(resolution+1,)*3,
+                                spacing=(1/resolution,)*3)
+            grid.cell_data['solid'] = solid.transpose(2, 1, 0).ravel(order='F')
+            grid.save(output/'solid.vti')
+            saved_files.append('solid.vti')
         metadata['voxel_porosity'] = float(1-solid.mean())
     display_porosity = metadata.get('voxel_porosity', porosity)
-    preview(centers, radii, output/'preview.png', display_porosity, boundary)
-    interactive_preview(centers, radii, output/'preview.html', display_porosity, boundary,
-                        mesh_path=output/'surface_mesh.npz')
-    (output/'metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
+    if save_preview_png:
+        preview(centers, radii, output/'preview.png', display_porosity, boundary)
+        saved_files.append('preview.png')
+    if any((save_preview_html, save_surface_npz, save_surface_vtp,
+            save_surface_stl)):
+        mesh_centers, mesh_radii = (periodic_images(centers, radii)
+                                    if boundary == 'periodic' else (centers, radii))
+        vertices, triangles, intensity = solid_sphere_mesh(mesh_centers, mesh_radii)
+        if save_surface_npz:
+            np.savez_compressed(output/'surface_mesh.npz', vertices=vertices,
+                                faces=triangles)
+            saved_files.append('surface_mesh.npz')
+        if save_surface_vtp or save_surface_stl:
+            faces = np.column_stack((np.full(len(triangles), 3), triangles)).ravel()
+            surface = pv.PolyData(vertices, faces)
+            surface.point_data['radius'] = intensity
+            if save_surface_vtp:
+                surface.save(output/'surface_mesh.vtp')
+                saved_files.append('surface_mesh.vtp')
+            if save_surface_stl:
+                surface.save(output/'surface_mesh.stl', binary=True)
+                saved_files.append('surface_mesh.stl')
+        if save_preview_html:
+            interactive_preview(vertices, triangles, intensity,
+                                output/'preview.html', display_porosity, boundary)
+            saved_files.append('preview.html')
+    if save_metadata_json:
+        saved_files.append('metadata.json')
+    metadata['saved_files'] = saved_files.copy()
+    if save_metadata_json:
+        (output/'metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
     print(json.dumps(metadata, indent=2))
     print(f'Saved to: {output.resolve()}')
     return centers, radii
@@ -203,18 +261,8 @@ def solid_sphere_mesh(centers, radii):
             np.concatenate(all_values))
 
 
-def interactive_preview(centers, radii, path, porosity, boundary, mesh_path=None):
+def interactive_preview(vertices, triangles, intensity, path, porosity, boundary):
     """离线 HTML 三维视图：拖动旋转、滚轮缩放，按钮切换透明度。"""
-    if boundary == 'periodic':
-        centers, radii = periodic_images(centers, radii)
-    vertices, triangles, intensity = solid_sphere_mesh(centers, radii)
-    if mesh_path is not None:
-        np.savez_compressed(mesh_path, vertices=vertices, faces=triangles)
-        faces = np.column_stack((np.full(len(triangles), 3), triangles)).ravel()
-        surface = pv.PolyData(vertices, faces)
-        surface.point_data['radius'] = intensity
-        surface.save(mesh_path.with_suffix('.vtp'))
-        surface.save(mesh_path.with_suffix('.stl'), binary=True)
     fig = go.Figure(go.Mesh3d(
         x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
         i=triangles[:, 0], j=triangles[:, 1], k=triangles[:, 2],

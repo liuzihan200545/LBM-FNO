@@ -27,7 +27,7 @@ PyCharm 使用 WSL 解释器 `/home/liuzihan/LBM-FNO/.venv/bin/python`。直接�
 uv run --locked python src/geometry/disk_pack3d.py
 ```
 
-默认生成 300 个球，目标孔隙率为 0.50，体素分辨率为 `128³`。`periodic` 模式会把穿过单位立方体边界的球体接续到对侧，适合构建周期计算单元。可以用命令行参数覆盖默认值：
+当前脚本默认生成 100 个球，目标孔隙率为 0.40，体素分辨率为 `128³`。`periodic` 模式会把穿过单位立方体边界的球体接续到对侧，适合构建周期计算单元。可以用命令行参数覆盖默认值：
 
 ```bash
 uv run --locked python src/geometry/disk_pack3d.py --n 300 --porosity 0.5 --resolution 128 --boundary periodic
@@ -44,6 +44,8 @@ uv run --locked python src/geometry/disk_pack3d.py --boundary wall --porosity 0.
 
 默认输出目录为 `src/geometry/output/spheres_3d/`：
 
+直接运行脚本或在 PyCharm 中运行时，可修改 `disk_pack3d.py` 顶部的 `SAVE_*` 开关，分别控制 `spheres.npz`、COMSOL Java、两种体素文件、两种预览和三种表面网格文件；`SAVE_METADATA_JSON` 控制参数摘要。将某项设为 `False` 会跳过该文件及不必要的体素化、表面网格计算，**不会删除目录中上一次运行留下的同名文件**。`metadata.json` 的 `saved_files` 记录本次实际生成的文件。
+
 | 文件 | 内容和用途 |
 | --- | --- |
 | `solid.npy` | 实心体素数组，轴顺序为 `[z, y, x]`；`1` 为固体，`0` 为孔隙。 |
@@ -55,7 +57,7 @@ uv run --locked python src/geometry/disk_pack3d.py --boundary wall --porosity 0.
 | `spheres.npz` | 原始球心 `centers` 和半径 `radii`，坐标按盒子边长归一化。边界球仍以完整球参数记录。 |
 | `preview.html` | 离线交互式三维预览，可旋转、缩放并切换透明度。 |
 | `preview.png` | 固定视角预览图。 |
-| `metadata.json` | 参数、最小球间隙和体素孔隙率。 |
+| `metadata.json` | 参数、最小球间隙、本次生成的文件；生成体素时还包含体素孔隙率。 |
 
 `--resolution 0` 可跳过体素生成。`clip` 模式的 `--porosity` 按完整球体积设定；裁切后的实际孔隙率应查看 `metadata.json` 中的 `voxel_porosity`。表面网格使用有限数量的三角形近似球面，因此由网格计算的体积与体素估计可能略有差异。
 
