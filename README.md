@@ -247,7 +247,34 @@ $$
 
 其中 $i$ 表示速度分量，$j$ 表示体积力方向，$\mu$ 是动力黏度，$f_0$ 是物理体积力密度。积分只覆盖孔隙流体域，但分母是**整个立方体体积**，因此在边长为 $L$ 的 COMSOL 模型中为 $L^3$。若 `intop1` 选择全部流体域，一次参数化扫描的三个结果表达式可写为 `mu_calc*intop1(u)/(L^3*F0)`、`mu_calc*intop1(v)/(L^3*F0)`、`mu_calc*intop1(w)/(L^3*F0)`；扫描结果的 x、y、z 三行分别对应 $\mathbf K$ 的第一、第二、第三列。
 
-这是对二维论文方法的三维扩展；三维 LBM 格子、收敛设置和物理单位换算需要另行确定。格子单位下的数值不能未经换算就标成 Darcy。
+这是对二维论文方法的三维扩展。三维 LBM 示例使用 D3Q19/BGK、周期外边界和固体半程反弹；它不是论文已经给出的三维数值结果。
+
+### 三维周期球堆积的 LBM 求解
+
+以 G1 的 `128 × 128 × 128` 球堆积为例，假设物理立方体边长为 `256 µm`：
+
+```bash
+uv run --locked python src/solver/3D_DARCY/main.py \
+  --solid src/geometry/output/sphere_cases/G1_seed42/solid.npy \
+  --length-um 256 --force 4e-6
+```
+
+输入 `solid.npy` 的轴顺序是 `[z, y, x]`，`1` 为固体、`0` 为孔隙。程序分别进行 x、y、z 三个方向的驱动，默认输出到 `src/solver/3D_DARCY/output/G1_seed42/`。`summary.json` 包含每个方向的迭代步数、是否收敛、平均速度、格子单位的渗透率矩阵和换算后的 `permeability_um_squared`；`flow_x.npz`、`flow_y.npz`、`flow_z.npz` 含 `[z, y, x]` 顺序的密度、速度和压力场。运行其他组时换成相应的 `G2_seed42` 等目录；`--output` 可指定独立的结果目录。
+
+`--length-um 256` 对应体素边长 `256/128=2 µm`，因此 $K_{\mathrm{µm}^2}=K_{\mathrm{lattice}^2}\,(2\,\mathrm{µm})^2$。`--force` 是**格子单位的驱动力**，不是 COMSOL 的 `N/m³`；要与 COMSOL 的 Stokes 渗透率比较，还需检查低驱动力下的结果是否稳定。`--steps 30000` 是迭代上限，只有 `summary.json` 中 `all_directions_converged` 为 `true` 才能将张量作为稳态结果。只想试跑单方向可加 `--direction x`；若暂不需要保存三维场数据，可加 `--no-save-fields`。
+
+### 三维流场可视化
+
+求解完成并保留默认的 `flow_x.npz`、`flow_y.npz`、`flow_z.npz` 后，运行：
+
+```bash
+uv run --locked python src/solver/3D_DARCY/visualize.py \
+  --output src/solver/3D_DARCY/output/G1_seed42
+```
+
+脚本为每个驱动方向生成 `flow_x.vti` 等 ParaView 文件，以及 `flow_x_slices.png` 等三个正交截面图。VTI 中的 `solid`、`speed`、`pressure`、`rho` 和三分量 `velocity` 都是**单元数据**；空间坐标根据求解摘要中的 `length_um` 写入，速度与压力仍为格子单位。直接打开 PNG 可先看中部的 XY、XZ、YZ 截面。
+
+在 ParaView 中打开 `flow_x.vti` 并点 **Apply**。要看流体截面，先对它使用 **Slice**，再使用 **Threshold**，将单元数据 `solid` 的上下限都设为 `0`，最后将着色字段选为 `speed`。要在三维孔隙中看流线，可先对原始 VTI 用 **Threshold: solid = 0**，接着做 **Cell Data to Point Data**，再用 **Stream Tracer**，选择 `velocity` 作为矢量并把种子线放在孔隙内。[ParaView 的 Threshold 与 Slice 文档](https://docs.paraview.org/en/v5.10.0/UsersGuide/filteringData.html)
 
 ## 运行环境说明
 

@@ -9,6 +9,7 @@ tmp/
 
 # 2d and 3d data 
 src/geometry/output/
+src/solver/3D_DARCY/output/
 reports/
 
 # Virtual environments
