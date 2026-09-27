@@ -1,52 +1,52 @@
 {
   "source_paper": "IFEDC202621768, section 3.2",
-  "solid_file": "/home/liuzihan/LBM-FNO/src/geometry/output/disks_periodic/solid.npy",
+  "solid_file": "/home/liuzihan/LBM-FNO/src/geometry/output/manual_2d/solid.npy",
   "shape_xy": [
     256,
     256
   ],
-  "porosity": 0.7566375732421875,
+  "porosity": 0.7917327880859375,
   "paper_resolution_match": false,
   "boundary": "periodic xy",
   "solid_bc": "halfway bounce-back",
   "model": "D2Q9 BGK",
   "omega": 1.0,
-  "force_lattice": 0.0004,
+  "force_lattice": 4e-06,
   "precision": "fp64",
   "convergence_rtol": 1e-06,
   "convergence_check_interval": 500,
   "runs": {
     "x": {
-      "steps": 4000,
-      "converged": true,
-      "relative_change": 5.480043117126998e-07,
-      "max_speed": 0.17737902526127425,
+      "steps": 30000,
+      "converged": false,
+      "relative_change": 0.0021399342380493997,
+      "max_speed": 0.04522132950306623,
       "mean_velocity_xy": [
-        0.029383971485610613,
-        -0.0003171633962955544
+        0.014075829761425252,
+        3.083710928720147e-06
       ]
     },
     "y": {
-      "steps": 4000,
-      "converged": true,
-      "relative_change": 4.358968337976389e-07,
-      "max_speed": 0.20267524688627858,
+      "steps": 30000,
+      "converged": false,
+      "relative_change": 4.868825943067526e-05,
+      "max_speed": 0.004193624047079667,
       "mean_velocity_xy": [
-        -0.00027276885791513634,
-        0.026664780141615538
+        -6.242984312723453e-06,
+        0.00020957750204541443
       ]
     }
   },
-  "all_directions_converged": true,
+  "all_directions_converged": false,
   "permeability_lattice_squared": [
     [
-      12.243321452337755,
-      -0.11365369079797347
+      586.4929067260522,
+      -0.2601243463634772
     ],
     [
-      -0.13215141512314765,
-      11.110325059006474
+      0.12848795536333946,
+      8.732395918558934
     ]
   ],
-  "symmetry_residual": 0.0011187781327320107
+  "symmetry_residual": 0.0006625300692360169
 }

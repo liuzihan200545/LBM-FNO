@@ -148,6 +148,22 @@ uv run --locked python src/geometry/disk_pack_periodic.py
 
 圆盘密度过高时，RSA 可能无法放满指定数量并提前停止。实际放置数见 `placed_disks`。原有的 `disk_pack.py` 使用不同的边界规则：圆盘必须完整留在盒内，不会跨边界回绕。
 
+### 在浏览器中手绘二维 LBM 几何
+
+```bash
+uv run --locked python src/geometry/draw_grid2d.py
+```
+
+在浏览器打开终端显示的 `http://127.0.0.1:8765`，用画笔、橡皮、实心圆或矩形绘制。默认网格为 `256 × 256`；可以在页面中新建其他尺寸，或导入已有的 `solid.npy`。画笔和圆形可勾选“跨边界回绕”，用于让边缘的固体结构在周期单元两侧接续。网页左下角为 `(0, 0)`；保存后得到 `src/geometry/output/manual_2d/solid.npy`，数组轴顺序为 `[x, y]`，`1` 为固体、`0` 为孔隙。再次启动脚本会载入上次保存的文件。
+
+页面会显示与输出文件对应的 LBM 运行命令；也可以在项目根目录手动运行：
+
+```bash
+uv run --locked python src/solver/2D_DARCY/main.py --solid src/geometry/output/manual_2d/solid.npy --force 4e-6
+```
+
+可用 `--input path/to/solid.npy` 在启动时载入另一份掩膜，用 `--output path/to/solid.npy` 指定保存位置，或用 `--port` 修改端口。网页只监听本机 `127.0.0.1`。保存的掩膜需要同时包含固体和孔隙；周期性绘制只处理跨边界固体的几何接续，流动周期边界由求解器设置。
+
 ### 从圆盘参数生成 DXF
 
 运行 `disk_pack_periodic.py` 时会**同时生成 DXF**，不需要对 `solid.npy` 做额外转换。导出使用 `disks.npz` 中同一组连续几何参数，即每个圆盘的圆心 `(x, y)` 和半径 `r`：
@@ -246,7 +262,7 @@ export XLA_PYTHON_CLIENT_PREALLOCATE=false
 - [x] 完成x方向体积力的速度场计算
 - [x] 完成y方向体积力的速度场计算
 - [x] 根据上面计算结果，计算出渗透率张量
-- [x] 更换更大的体积力，判断之前结果都正确性
+- [x] 更换更大的体积力，判断之前结果的正确性
 - [x] 更换更大的基质面积，判断渗透率与基质面积关系
 - [x] 调研学习3d情况下如何使用comsol
 
@@ -254,11 +270,17 @@ export XLA_PYTHON_CLIENT_PREALLOCATE=false
 - [x] 跑通COMSOL3D模拟
 - [x] 计算三位渗透率张量
 - [x] 完成2d情况下的xlb gpu并行
-- [x] 改善2d情况下的不收敛问题，准确算出了稳态情况
 
 ## 2026-9-26 TODO:
 - [x] 研究不规则情况下的渗透率张量
+- [x] 研究二维情况下的个性化岩心生成
+- [x] 研究三维情况下的个性化岩心生成
+- [x] 改善2d情况下的不收敛问题，准确算出了稳态情况
+
+## 2026-9-26 TODO:
 - [ ] 确定物理单位设计
-- [ ] 研究二维情况下的个性化岩心生成
-- [ ] 研究三维情况下的个性化岩心生成
 - [ ] 研究如何可视化三维结果
+- [ ] 大批量生成2D网络
+- [ ] 大批量生成3D网络
+- [ ] 研究如何加快在gpu的并行效率
+- [ ] 做一个可以自己用笔画孔隙的小玩具
